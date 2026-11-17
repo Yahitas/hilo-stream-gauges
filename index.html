@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-title" content="Hilo Gauges">
+<title>Hilo Stream Gauges</title>
+<meta name="description" content="Live USGS discharge and rainfall for the Hilo-side streams, plus the NWS rain forecast.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b4f6c'/%3E%3Cpath d='M5 20c4 0 4-5 8-5s4 5 8 5 4-4 6-4' stroke='%23fff' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b4f6c'/%3E%3Cpath d='M5 20c4 0 4-5 8-5s4 5 8 5 4-4 6-4' stroke='%23fff' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#ffffff; --panel:#ffffff; --ink:#15202b; --mute:#5b6b7b; --faint:#8c9aa8;
+  --line:#dfe5ea; --rule:#eef2f5;
+  --accent:#0b4f6c; --rise:#0a7d4b; --fall:#9a5b00; --prov:#b26a00;
+  --bar:#2f7fa8;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:400 15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-text-size-adjust:100%;
+  padding:0 16px 48px;
+  max-width:720px; margin:0 auto;
+}
+h1{font-size:19px; font-weight:650; margin:20px 0 2px; letter-spacing:-.01em}
+.sub{color:var(--mute); font-size:13px; margin:0 0 14px}
+
+.tabs{display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 0 16px}
+.tab{
+  -webkit-appearance:none; appearance:none; background:none; border:0;
+  font:inherit; font-size:14px; font-weight:550; color:var(--mute);
+  padding:9px 12px; cursor:pointer; border-bottom:2px solid transparent;
+  margin-bottom:-1px;
+}
+.tab[aria-selected="true"]{color:var(--accent); border-bottom-color:var(--accent)}
+
+.card{
+  border:1px solid var(--line); border-radius:10px;
+  padding:13px 14px; margin:0 0 10px; background:var(--panel);
+}
+.card-hd{
+  display:flex; align-items:baseline; justify-content:space-between;
+  gap:10px; cursor:pointer; -webkit-tap-highlight-color:transparent;
+}
+.card-hd:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:4px}
+.nm{font-size:14px; font-weight:600; margin:0; line-height:1.25}
+.nm span{display:block; font-weight:400; font-size:12px; color:var(--mute); margin-top:1px}
+.val{text-align:right; white-space:nowrap}
+.q{font-size:29px; font-weight:600; letter-spacing:-.02em; line-height:1; color:var(--ink)}
+.q-unit{font-size:12px; font-weight:400; color:var(--mute); margin-left:3px}
+.tr{font-size:12px; margin-top:4px; color:var(--mute)}
+.tr.v-rise{color:var(--rise)}
+.tr.v-fall{color:var(--fall)}
+.chev{font-size:11px; color:var(--faint); margin-left:6px}
+
+.wrap{margin-top:10px; width:100%}
+.wrap svg{display:block; width:100%; height:auto}
+.axlab{font-size:10px; fill:var(--faint)}
+.gridline{stroke:var(--rule); stroke-width:1}
+.zeroline{stroke:var(--line); stroke-width:1}
+.series{fill:none; stroke:var(--accent); stroke-width:2; stroke-linejoin:round; stroke-linecap:round}
+.seriesfill{fill:var(--accent); opacity:.07; stroke:none}
+.dot{fill:var(--accent)}
+.barrect{fill:var(--bar)}
+.barzero{fill:var(--line)}
+
+.detail{margin-top:12px; padding-top:12px; border-top:1px solid var(--rule)}
+.seg{display:inline-flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; margin-bottom:4px}
+.seg button{
+  -webkit-appearance:none; appearance:none; background:#fff; border:0; border-right:1px solid var(--line);
+  font:inherit; font-size:12px; color:var(--mute); padding:6px 11px; cursor:pointer;
+}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent); color:#fff}
+.meta{font-size:12px; color:var(--mute); margin:9px 0 0}
+.meta b{font-weight:600; color:var(--ink)}
+
+.rrow{display:flex; justify-content:space-between; align-items:baseline; padding:9px 0; border-bottom:1px solid var(--rule); gap:12px}
+.rrow:last-child{border-bottom:0}
+.rtot{white-space:nowrap; font-size:13px; text-align:right}
+.rtot b{font-size:17px; font-weight:600}
+.secthd{font-size:12px; font-weight:650; text-transform:uppercase; letter-spacing:.055em; color:var(--faint); margin:22px 0 6px}
+.note{font-size:12px; color:var(--mute); margin:7px 0 0}
+
+.stale{color:var(--prov); font-size:11px; font-weight:550}
+.err{color:var(--fall); font-size:12px}
+.skel{color:var(--faint); font-size:13px}
+footer{margin-top:28px; padding-top:14px; border-top:1px solid var(--line); font-size:11.5px; line-height:1.5; color:var(--faint)}
+footer p{margin:0 0 6px}
+.bar-x{font-size:9.5px; fill:var(--faint)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11161b; --panel:#161c23; --ink:#e8edf2; --mute:#97a6b4; --faint:#6f8090;
+    --line:#2a333d; --rule:#222a33; --accent:#6fb4d6; --rise:#4cc08a; --fall:#d79a4a;
+    --prov:#d79a4a; --bar:#4e9cc4;
+  }
+  :root:not([data-theme="light"]) .seg button{background:var(--panel)}
+  :root:not([data-theme="light"]) .seg button[aria-pressed="true"]{color:#11161b}
+}
+</style>
+</head>
+<body>
+
+<h1>Hilo Stream Gauges</h1>
+<p class="sub" id="sub">Loading…</p>
+
+<div class="tabs" role="tablist">
+  <button class="tab" id="tab-streams" role="tab" aria-selected="true" aria-controls="p-streams">Streams</button>
+  <button class="tab" id="tab-rain" role="tab" aria-selected="false" aria-controls="p-rain">Rain</button>
+</div>
+
+<noscript>
+  <p style="border:1px solid #dfe5ea;border-radius:10px;padding:13px 14px">
+    This page reads live USGS and National Weather Service data in the browser, so it needs JavaScript
+    switched on. With JavaScript off there is nothing to show. The underlying data is at
+    waterdata.usgs.gov and api.weather.gov.
+  </p>
+</noscript>
+
+<div id="p-streams" role="tabpanel" aria-labelledby="tab-streams"></div>
+<div id="p-rain" role="tabpanel" aria-labelledby="tab-rain" hidden></div>
+
+<footer>
+  <p><b>Provisional data, subject to revision.</b> These readings have not been reviewed or
+  approved by the USGS. They may be wrong because of instrument faults or physical change at the
+  gauge. Do not use them for any decision about personal or public safety.</p>
+  <p>Discharge and rainfall: U.S. Geological Survey, National Water Information System.
+  Rain forecast: NOAA National Weather Service, Honolulu. All times Hawaii Standard Time (HST).</p>
+  <p>Not a USGS product and not endorsed by the USGS. Built for ASU field work.</p>
+</footer>
+
+<script>
+(function(){
+"use strict";
+
+var USGS = "https://api.waterdata.usgs.gov/ogcapi/v0/collections";
+var NWS  = "https://api.weather.gov/gridpoints";
+var STALE_MIN = 90;
+
+var STREAMS = [
+  {id:"16717000", nm:"Honoliʻi Stream", at:"near Papaikōu", area:12.04, alt:1540},
+  {id:"16704000", nm:"Wailuku River", at:"at Piʻihonua", area:220.0, alt:1090, contrib:148.6},
+  {id:"16701800", nm:"Wailuku River", at:"near Kaumana", area:38.44, alt:3520}
+];
+
+var RAINGAUGES = [
+  {id:"194117155174801", nm:"Quarry Rain Gage", at:"Saddle Rd · 4,220 ft · Wailuku headwaters"},
+  {id:"194602155091801", nm:"Honoliʻi Rain Gage", at:"near Papaikōu · 1,540 ft · at the stream gauge"}
+];
+
+var GRID_HILO = "HFO/270,74";
+var GRID_WEST = "HFO/242,87";
+
+var state = {tab:"streams", open:null, range:{}, rainRange:"48h"};
+var cache = {};
+var widths = {};
+
+/* ---------- time, all display in HST (UTC-10, no DST) ---------- */
+function hstParts(ms){
+  var d = new Date(ms - 10*3600000);
+  return {y:d.getUTCFullYear(), mo:d.getUTCMonth()+1, d:d.getUTCDate(),
+          h:d.getUTCHours(), mi:d.getUTCMinutes(), wd:d.getUTCDay()};
+}
+var WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function fmtClock(ms){
+  var p = hstParts(ms), h = p.h % 12; if(h === 0) h = 12;
+  return h + ":" + (p.mi < 10 ? "0" : "") + p.mi + (p.h < 12 ? "a" : "p");
+}
+function fmtDayClock(ms){ var p = hstParts(ms); return WD[p.wd] + " " + fmtClock(ms); }
+function fmtMD(ms){ var p = hstParts(ms); return p.mo + "/" + p.d; }
+function fmtFull(ms){
+  var p = hstParts(ms), h = p.h % 12; if(h === 0) h = 12;
+  return WD[p.wd] + " " + p.mo + "/" + p.d + " " + h + ":" + (p.mi<10?"0":"") + p.mi +
+         " " + (p.h < 12 ? "AM" : "PM") + " HST";
+}
+function ageMin(ms){ return Math.round((Date.now() - ms)/60000); }
+function fmtAge(m){
+  if(m < 1) return "just now";
+  if(m < 60) return m + " min ago";
+  var h = m/60;
+  if(h < 24) return (h < 10 ? h.toFixed(1) : Math.round(h)) + " h ago";
+  return Math.round(h/24) + " d ago";
+}
+
+/* ---------- fetch with a Safari-15-safe timeout ---------- */
+function getJSON(url, ms){
+  var ac = (typeof AbortController === "function") ? new AbortController() : null;
+  var timer = setTimeout(function(){ if(ac) ac.abort(); }, ms || 15000);
+  var opts = ac ? {signal: ac.signal} : {};
+  return fetch(url, opts).then(function(r){
+    clearTimeout(timer);
+    if(r.status === 429) throw new Error("USGS is rate limiting, try again in a few minutes");
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }, function(e){ clearTimeout(timer); throw e; });
+}
+function iso(ms){ return new Date(ms).toISOString().replace(/\.\d+Z$/, "Z"); }
+function ymd(ms){
+  var d = new Date(ms);
+  return d.getUTCFullYear() + "-" + ("0"+(d.getUTCMonth()+1)).slice(-2) + "-" + ("0"+d.getUTCDate()).slice(-2);
+}
+
+function points(feats){
+  var out = [];
+  for(var i = 0; i < feats.length; i++){
+    var p = feats[i].properties, v = parseFloat(p.value), t = Date.parse(p.time);
+    if(isFinite(v) && isFinite(t)) out.push({t:t, v:v});
+  }
+  out.sort(function(a,b){ return a.t - b.t; });
+  return out;
+}
+/* daily `time` is a bare calendar date; anchor it at local noon so the HST label
+   shows the right day instead of sliding back one. */
+function dailyPoints(feats){
+  var out = [];
+  for(var i = 0; i < feats.length; i++){
+    var p = feats[i].properties, v = parseFloat(p.value);
+    var t = Date.parse(p.time + "T22:00:00Z");
+    if(isFinite(v) && isFinite(t)) out.push({t:t, v:v});
+  }
+  out.sort(function(a,b){ return a.t - b.t; });
+  return out;
+}
+
+function contURL(id, pc, sinceMs, lim){
+  return USGS + "/continuous/items?monitoring_location_id=USGS-" + id +
+    "&parameter_code=" + pc + "&datetime=" + encodeURIComponent(iso(sinceMs) + "/..") +
+    "&sortby=-time&limit=" + lim + "&f=json";
+}
+function dailyURL(id, days){
+  var since = ymd(Date.now() - days*86400000);
+  return USGS + "/daily/items?monitoring_location_id=USGS-" + id +
+    "&parameter_code=00060&statistic_id=00003&datetime=" + encodeURIComponent(since + "/..") +
+    "&sortby=-time&limit=60&f=json";
+}
+
+/* ---------- symlog, which is what USGS uses for discharge ---------- */
+function sf(v){ return v >= 0 ? Math.log10(1 + v) : -Math.log10(1 - v); }
+var YT = [0,0.05,0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000,5000,10000,20000,50000];
+
+function nfmt(v){
+  if(!isFinite(v)) return "–";
+  if(v >= 1000) return Math.round(v).toLocaleString();
+  if(v >= 100) return v.toFixed(0);
+  if(v >= 10) return v.toFixed(1);
+  return v.toFixed(2);
+}
+/* Axis ticks want round numbers. nfmt is for a live reading, where 37.94 matters;
+   on an axis that same precision is noise. */
+function tfmt(v){
+  var a = Math.abs(v);
+  if(!isFinite(v)) return "";
+  if(a >= 1000) return Math.round(v).toLocaleString();
+  if(a >= 10) return String(Math.round(v));
+  if(a >= 1) return v.toFixed(1);
+  if(a < 1e-9) return "0";
+  return v.toFixed(2);
+}
+function esc(s){
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* Axes are drawn in real pixels: viewBox units equal CSS pixels, and there is no
+   preserveAspectRatio stretch, so text and the line keep their true shape. */
+function lineChart(pts, W, H, xfmt){
+  var ml = 42, mr = 10, mt = 8, mb = 22;
+  var iw = W - ml - mr, ih = H - mt - mb;
+  if(iw < 60 || ih < 30 || pts.length < 2) return "";
+  var i, lo = Infinity, hi = -Infinity;
+  for(i = 0; i < pts.length; i++){ if(pts[i].v < lo) lo = pts[i].v; if(pts[i].v > hi) hi = pts[i].v; }
+  var f0 = sf(lo), f1 = sf(hi);
+  if(f1 - f0 < 1e-9){ f0 = Math.max(0, f0 - 0.25); f1 = f1 + 0.25; }
+  var pad = (f1 - f0) * 0.1; f0 = Math.max(0, f0 - pad); f1 = f1 + pad;
+  var t0 = pts[0].t, t1 = pts[pts.length-1].t; if(t1 <= t0) t1 = t0 + 1;
+  function X(t){ return ml + (t - t0)/(t1 - t0)*iw; }
+  function Y(v){ return mt + ih - (sf(v) - f0)/(f1 - f0)*ih; }
+
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H +
+          '" role="img" aria-label="Discharge over time, cubic feet per second">';
+
+  var ticks = [], n;
+  for(i = 0; i < YT.length; i++){ n = sf(YT[i]); if(n >= f0 && n <= f1) ticks.push(YT[i]); }
+  if(ticks.length > 6){
+    var keep = [], step = Math.ceil(ticks.length/5);
+    for(i = 0; i < ticks.length; i += step) keep.push(ticks[i]);
+    if(keep[keep.length-1] !== ticks[ticks.length-1]) keep.push(ticks[ticks.length-1]);
+    ticks = keep;
+  }
+  /* A narrow range (a flat 24 h, say) crosses no decade, so the decade ticks above
+     come back nearly empty and the axis degenerates to two labels. Fall back to evenly
+     spaced VALUES, still POSITIONED by symlog, so the axis reads without changing the
+     scale USGS uses. */
+  if(ticks.length < 3){
+    ticks = [];
+    for(i = 0; i <= 3; i++) ticks.push(lo + (hi - lo)*i/3);
+  }
+  for(i = 0; i < ticks.length; i++){
+    var y = Y(ticks[i]).toFixed(1);
+    s += '<line class="' + (ticks[i] === 0 ? "zeroline" : "gridline") + '" x1="' + ml +
+         '" y1="' + y + '" x2="' + (ml + iw) + '" y2="' + y + '"/>';
+    s += '<text class="axlab" x="' + (ml - 5) + '" y="' + y + '" text-anchor="end" dominant-baseline="middle">' +
+         esc(tfmt(ticks[i])) + '</text>';
+  }
+
+  var nx = iw < 260 ? 3 : 4;
+  for(i = 0; i <= nx; i++){
+    var tv = t0 + (t1 - t0)*i/nx, px = X(tv);
+    var anc = i === 0 ? "start" : (i === nx ? "end" : "middle");
+    s += '<text class="axlab" x="' + px.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="' + anc + '">' +
+         esc(xfmt(tv)) + '</text>';
+  }
+
+  var d = "";
+  for(i = 0; i < pts.length; i++) d += (i ? "L" : "M") + X(pts[i].t).toFixed(1) + " " + Y(pts[i].v).toFixed(1);
+  s += '<path class="seriesfill" d="' + d + 'L' + X(t1).toFixed(1) + ' ' + (mt+ih) +
+       'L' + X(t0).toFixed(1) + ' ' + (mt+ih) + 'Z"/>';
+  s += '<path class="series" d="' + d + '"/>';
+  var last = pts[pts.length-1];
+  s += '<circle class="dot" cx="' + X(last.t).toFixed(1) + '" cy="' + Y(last.v).toFixed(1) + '" r="3"/>';
+  s += '<text class="axlab" x="2" y="' + (mt + 4) + '">cfs</text>';
+  return s + "</svg>";
+}
+
+function barChart(blocks, W, H){
+  var ml = 34, mr = 8, mt = 8, mb = 26;
+  var iw = W - ml - mr, ih = H - mt - mb;
+  if(iw < 60 || !blocks.length) return "";
+  var i, hi = 0;
+  for(i = 0; i < blocks.length; i++) if(blocks[i].inches > hi) hi = blocks[i].inches;
+  var top = hi <= 0 ? 0.1 : hi * 1.2;
+  var bw = iw / blocks.length;
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H +
+          '" role="img" aria-label="Forecast rainfall per six-hour block, inches">';
+  var steps = [0, top/2, top];
+  for(i = 0; i < steps.length; i++){
+    var y = (mt + ih - steps[i]/top*ih).toFixed(1);
+    s += '<line class="' + (i === 0 ? "zeroline" : "gridline") + '" x1="' + ml + '" y1="' + y +
+         '" x2="' + (ml+iw) + '" y2="' + y + '"/>';
+    s += '<text class="axlab" x="' + (ml-5) + '" y="' + y + '" text-anchor="end" dominant-baseline="middle">' +
+         steps[i].toFixed(2) + '</text>';
+  }
+  for(i = 0; i < blocks.length; i++){
+    var b = blocks[i];
+    var h = b.inches <= 0 ? 1.5 : Math.max(1.5, b.inches/top*ih);
+    var x = ml + i*bw + bw*0.16, w = bw*0.68;
+    s += '<rect class="' + (b.inches > 0 ? "barrect" : "barzero") + '" x="' + x.toFixed(1) +
+         '" y="' + (mt + ih - h).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) +
+         '" rx="1.5"><title>' + esc(fmtDayClock(b.start) + " HST → " + b.inches.toFixed(2) + " in") + '</title></rect>';
+    var every = blocks.length > 10 ? 4 : 2;
+    if(i % every === 0){
+      s += '<text class="bar-x" x="' + (x + w/2).toFixed(1) + '" y="' + (H - 14) + '" text-anchor="middle">' +
+           esc(fmtClock(b.start)) + '</text>';
+      s += '<text class="bar-x" x="' + (x + w/2).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="middle">' +
+           esc(fmtMD(b.start)) + '</text>';
+    }
+  }
+  s += '<text class="axlab" x="2" y="' + (mt + 4) + '">in</text>';
+  return s + "</svg>";
+}
+
+/* ---------- trend ---------- */
+function trendOf(pts){
+  if(pts.length < 2) return {cls:"", txt:"one reading only"};
+  var a = pts[0].v, b = pts[pts.length-1].v;
+  var hrs = (pts[pts.length-1].t - pts[0].t)/3600000;
+  var span = hrs >= 1 ? hrs.toFixed(hrs < 2 ? 1 : 0) + " h" : Math.round(hrs*60) + " min";
+  if(a === 0 && b === 0) return {cls:"", txt:"flat at zero, " + span};
+  if(a === 0) return {cls:"v-rise", txt:"↑ up from zero over " + span};
+  var pc = (b - a)/a*100;
+  if(pc >= 5) return {cls:"v-rise", txt:"↑ rising +" + pc.toFixed(0) + "% over " + span};
+  if(pc <= -5) return {cls:"v-fall", txt:"↓ falling " + pc.toFixed(0) + "% over " + span};
+  return {cls:"", txt:"→ steady " + (pc > 0 ? "+" : "") + pc.toFixed(0) + "% over " + span};
+}
+
+/* ---------- NWS QPF: one bar per forecast block, no invented hourly detail ---------- */
+function durHours(s){
+  var m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/.exec(s);
+  if(!m) return null;
+  return (+(m[1]||0))*24 + (+(m[2]||0)) + (+(m[3]||0))/60;
+}
+function qpfBlocks(vals, hoursAhead){
+  var now = Date.now(), end = now + hoursAhead*3600000, out = [];
+  for(var i = 0; i < vals.length; i++){
+    var parts = String(vals[i].validTime).split("/");
+    var st = Date.parse(parts[0]), dh = durHours(parts[1]);
+    if(!isFinite(st) || !dh) continue;
+    var fin = st + dh*3600000;
+    if(fin <= now || st >= end) continue;
+    var mm = vals[i].value;
+    out.push({start:st, hours:dh, inches: mm == null ? 0 : mm/25.4, partial: st < now});
+  }
+  return out;
+}
+
+/* ---------- render ---------- */
+function measure(el){
+  var w = el.clientWidth || el.getBoundingClientRect().width || 0;
+  return Math.max(0, Math.round(w));
+}
+
+function streamCard(cfg){
+  var c = cache[cfg.id] || {};
+  var open = state.open === cfg.id;
+  var h = '<div class="card" data-sid="' + cfg.id + '">';
+  h += '<div class="card-hd" role="button" tabindex="0" aria-expanded="' + (open ? "true" : "false") +
+       '" data-toggle="' + cfg.id + '"><div class="nm">' + esc(cfg.nm) +
+       '<span>' + esc(cfg.at) + ' · ' + esc(cfg.id) + '</span></div><div class="val">';
+  if(c.q && c.q.length){
+    var last = c.q[c.q.length-1], tr = trendOf(c.q), am = ageMin(last.t);
+    h += '<div class="q">' + esc(nfmt(last.v)) + '<span class="q-unit">cfs</span></div>';
+    h += '<div class="tr ' + tr.cls + '">' + esc(tr.txt) + '</div>';
+    h += '<div class="tr">' + esc(fmtAge(am)) + (am > STALE_MIN ? ' <span class="stale">· stale</span>' : "") +
+         '<span class="chev">' + (open ? "▴" : "▾") + '</span></div>';
+  } else if(c.err){
+    h += '<div class="err">no reading</div>';
+  } else {
+    h += '<div class="skel">…</div>';
+  }
+  h += '</div></div>';
+
+  h += '<div class="wrap" data-chart="' + cfg.id + '" data-kind="line"></div>';
+
+  if(open){
+    var r = state.range[cfg.id] || "24h";
+    h += '<div class="detail"><div class="seg" role="group" aria-label="Time range">';
+    var opts = [["24h","24 hours"],["7d","1 week"],["21d","3 weeks"]];
+    for(var i = 0; i < opts.length; i++){
+      h += '<button type="button" data-range="' + opts[i][0] + '" data-sid="' + cfg.id +
+           '" aria-pressed="' + (r === opts[i][0] ? "true" : "false") + '">' + opts[i][1] + '</button>';
+    }
+    h += '</div>';
+    if(r !== "24h"){
+      h += '<p class="note">Daily mean, which is the only series USGS publishes this far back. ' +
+           'It lags about a day, so today is not on this chart.</p>';
+    }
+    h += '<p class="meta">Drainage area <b>' + cfg.area.toFixed(cfg.area < 100 ? 2 : 1) + ' sq mi</b>' +
+         (cfg.contrib ? ' (' + cfg.contrib + ' sq mi contributing)' : "") +
+         ' · gauge at <b>' + cfg.alt.toLocaleString() + ' ft</b>';
+    if(c.gh && c.gh.length){
+      var g = c.gh[c.gh.length-1];
+      h += ' · gage height <b>' + g.v.toFixed(2) + ' ft</b>';
+    }
+    h += '</p>';
+    if(c.err) h += '<p class="err">Last refresh failed (' + esc(c.err) + '). Showing the last good reading.</p>';
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+
+function renderStreams(){
+  var el = document.getElementById("p-streams"), h = "";
+  for(var i = 0; i < STREAMS.length; i++) h += streamCard(STREAMS[i]);
+  el.innerHTML = h;
+  for(i = 0; i < STREAMS.length; i++) paintChart(STREAMS[i].id);
+  updateSub();
+}
+
+function paintChart(sid){
+  var el = document.querySelector('[data-chart="' + sid + '"]');
+  if(!el) return;
+  var c = cache[sid] || {};
+  var open = state.open === sid;
+  var r = open ? (state.range[sid] || "24h") : "24h";
+  var pts = r === "24h" ? c.q : (r === "7d" ? c.d7 : c.d21);
+  if(!pts || pts.length < 2){
+    var st = r === "24h" ? null : c[(r === "7d" ? "d7" : "d21") + "St"];
+    if(st === "loading") el.innerHTML = '<p class="skel">Loading daily means…</p>';
+    else if(st) el.innerHTML = '<p class="err">' + esc(st) + '. Tap the range again to retry.</p>';
+    else el.innerHTML = "";
+    return;
+  }
+  var W = measure(el);
+  if(!W){ el.innerHTML = ""; return; }
+  widths[sid] = W;
+  var H = open ? 180 : 96;
+  var xfmt = r === "24h" ? fmtClock : fmtMD;
+  el.innerHTML = lineChart(pts, W, H, xfmt);
+}
+
+function renderRain(){
+  var el = document.getElementById("p-rain"), c = cache._rain || {}, i;
+  var h = '<div class="secthd">Measured rain, USGS gauges</div><div class="card">';
+  for(i = 0; i < RAINGAUGES.length; i++){
+    var g = RAINGAUGES[i], d = (c.obs || {})[g.id];
+    h += '<div class="rrow"><div class="nm">' + esc(g.nm) + '<span>' + esc(g.at) + '</span></div><div class="rtot">';
+    if(d && d.ok){
+      h += '<b>' + (d.h1 === null ? "–" : d.h1.toFixed(2)) + '</b> in / 1 h<br>' +
+           '<b>' + (d.h6 === null ? "–" : d.h6.toFixed(2)) + '</b> in / 6 h';
+      h += '<div class="tr">' + esc(fmtAge(ageMin(d.newest))) +
+           (ageMin(d.newest) > STALE_MIN ? ' <span class="stale">· stale</span>' : "") + '</div>';
+      if(d.short) h += '<div class="tr"><span class="stale">' + esc(d.short) + '</span></div>';
+    } else if(d && d.err){ h += '<span class="err">no reading</span>'; }
+    else { h += '<span class="skel">…</span>'; }
+    h += '</div></div>';
+  }
+  h += '</div><p class="note">Totals add the 15-minute buckets inside the window. A dash means the gauge ' +
+       'reported nothing in that window, which is not the same as zero rain.</p>';
+
+  h += '<div class="secthd">Forecast rain, Hilo</div><div class="card">';
+  h += '<div class="seg" role="group" aria-label="Forecast length">' +
+       '<button type="button" data-rrange="48h" aria-pressed="' + (state.rainRange === "48h" ? "true" : "false") + '">48 hours</button>' +
+       '<button type="button" data-rrange="7d" aria-pressed="' + (state.rainRange === "7d" ? "true" : "false") + '">7 days</button>' +
+       '</div>';
+  h += '<div class="wrap" data-chart="_hilo" data-kind="bar"></div>';
+  if(c.hiloTotal != null){
+    h += '<p class="meta">Total forecast for the next ' + (state.rainRange === "48h" ? "48 hours" : "7 days") +
+         ': <b>' + c.hiloTotal.toFixed(2) + ' in</b></p>';
+  }
+  if(c.hiloErr) h += '<p class="err">Forecast unavailable (' + esc(c.hiloErr) + ').</p>';
+  else if(!c.hilo) h += '<p class="skel">Loading forecast…</p>';
+  h += '<p class="note">Each bar is one 6-hour National Weather Service block, which is the finest ' +
+       'resolution they forecast rain amounts at. Nothing is spread across hours.</p></div>';
+
+  h += '<div class="secthd">West side, Waiʻulaʻula · secondary</div><div class="card">';
+  h += '<div class="wrap" data-chart="_west" data-kind="bar"></div>';
+  if(c.westTotal != null){
+    h += '<p class="meta">Waikoloa Village grid, nearest NWS cell to the Waiʻulaʻula confluence. ' +
+         'Next ' + (state.rainRange === "48h" ? "48 h" : "7 d") + ': <b>' + c.westTotal.toFixed(2) + ' in</b></p>';
+  }
+  if(c.westErr) h += '<p class="err">Forecast unavailable (' + esc(c.westErr) + ').</p>';
+  h += '<p class="note">Forecast only. There is no telemetered USGS gauge anywhere on Waiʻulaʻula, ' +
+       'so nothing measured can be shown here.</p></div>';
+
+  el.innerHTML = h;
+  paintBars();
+}
+
+function paintBars(){
+  var c = cache._rain || {};
+  var hours = state.rainRange === "48h" ? 48 : 168;
+  var pairs = [["_hilo", c.hilo], ["_west", c.west]];
+  for(var i = 0; i < pairs.length; i++){
+    var el = document.querySelector('[data-chart="' + pairs[i][0] + '"]');
+    if(!el) continue;
+    var vals = pairs[i][1];
+    if(!vals){ el.innerHTML = ""; continue; }
+    var W = measure(el);
+    if(!W){ el.innerHTML = ""; continue; }
+    var blocks = qpfBlocks(vals, hours);
+    el.innerHTML = barChart(blocks, W, hours === 48 ? 150 : 170);
+  }
+}
+
+function updateSub(){
+  var newest = 0, ok = 0;
+  for(var i = 0; i < STREAMS.length; i++){
+    var c = cache[STREAMS[i].id];
+    if(c && c.q && c.q.length){ ok++; if(c.q[c.q.length-1].t > newest) newest = c.q[c.q.length-1].t; }
+  }
+  var el = document.getElementById("sub");
+  if(!newest){ el.textContent = ok ? "–" : "Loading live USGS data…"; return; }
+  el.textContent = "Newest reading " + fmtFull(newest) + " · " + fmtAge(ageMin(newest)) +
+                   " · " + ok + " of " + STREAMS.length + " gauges reporting";
+}
+
+/* ---------- loaders, each gauge independent so one failure cannot blank the page ---------- */
+function loadStream(cfg){
+  var since = Date.now() - 26*3600000;
+  cache[cfg.id] = cache[cfg.id] || {};
+  getJSON(contURL(cfg.id, "00060", since, 400)).then(function(j){
+    var p = points(j.features || []);
+    if(p.length){ cache[cfg.id].q = p; cache[cfg.id].err = null; }
+    else if(!cache[cfg.id].q) cache[cfg.id].err = "no points in 26 h";
+  }, function(e){
+    if(!cache[cfg.id].q) cache[cfg.id].err = e.message || "fetch failed";
+    else cache[cfg.id].err = e.message || "fetch failed";
+  }).then(function(){
+    if(state.tab === "streams"){ renderStreams(); }
+  });
+
+  getJSON(contURL(cfg.id, "00065", since, 400)).then(function(j){
+    var p = points(j.features || []);
+    if(p.length) cache[cfg.id].gh = p;
+  }, function(){}).then(function(){
+    if(state.tab === "streams" && state.open === cfg.id) renderStreams();
+  });
+}
+
+function loadWide(sid, key, days){
+  cache[sid] = cache[sid] || {};
+  if(cache[sid][key]) { paintChart(sid); return; }
+  /* Swallowing this error left the chart an empty box with no explanation, which reads
+     as a dead gauge rather than a failed request. Track the state so the card can say
+     which it is. Tapping the range button again refetches, because a cache miss stays
+     a cache miss. */
+  if(cache[sid][key + "St"] === "loading") return;
+  cache[sid][key + "St"] = "loading";
+  paintChart(sid);
+  getJSON(dailyURL(sid, days)).then(function(j){
+    var p = dailyPoints(j.features || []);
+    if(p.length > 1){ cache[sid][key] = p; cache[sid][key + "St"] = null; }
+    else cache[sid][key + "St"] = "USGS has no daily means for this range yet";
+  }, function(e){
+    cache[sid][key + "St"] = e.message || "fetch failed";
+  }).then(function(){
+    if(state.tab === "streams") renderStreams();
+  });
+}
+
+function loadRainObs(g){
+  cache._rain = cache._rain || {};
+  cache._rain.obs = cache._rain.obs || {};
+  var since = Date.now() - 7*3600000;
+  getJSON(contURL(g.id, "00045", since, 200)).then(function(j){
+    var p = points(j.features || []);
+    if(!p.length){ cache._rain.obs[g.id] = {err:"no points"}; return; }
+    var now = Date.now(), newest = p[p.length-1].t;
+    function win(h){
+      var cut = now - h*3600000, sum = 0, n = 0;
+      for(var i = 0; i < p.length; i++) if(p[i].t > cut){ sum += p[i].v; n++; }
+      return {sum:sum, n:n, want: h*4};
+    }
+    var a = win(1), b = win(6);
+    var short = null;
+    if(b.n && b.n < b.want) short = b.n + " of " + b.want + " reports in 6 h";
+    cache._rain.obs[g.id] = {
+      ok:true, newest:newest,
+      h1: a.n ? Math.round(a.sum*100)/100 : null,
+      h6: b.n ? Math.round(b.sum*100)/100 : null,
+      short: short
+    };
+  }, function(e){
+    cache._rain.obs[g.id] = {err: e.message || "fetch failed"};
+  }).then(function(){ if(state.tab === "rain") renderRain(); });
+}
+
+function loadForecast(grid, key){
+  cache._rain = cache._rain || {};
+  getJSON(NWS + "/" + grid, 20000).then(function(j){
+    var q = ((j.properties || {}).quantitativePrecipitation || {}).values;
+    /* A throw here lands in the NEXT then, not in the sibling rejection handler just
+       below, and that next then has no rejection handler. So this used to become an
+       unhandled rejection: the error was never recorded and the tab sat on
+       "Loading forecast" forever. Record it instead of throwing it. */
+    if(!q || !q.length){
+      cache._rain[key + "Err"] = "NWS returned no precipitation forecast";
+      return;
+    }
+    cache._rain[key] = q;
+    cache._rain[key + "Err"] = null;
+  }, function(e){
+    cache._rain[key + "Err"] = e.message || "fetch failed";
+  }).then(function(){ recalcTotals(); if(state.tab === "rain") renderRain(); });
+}
+
+function recalcTotals(){
+  var c = cache._rain || {};
+  var hours = state.rainRange === "48h" ? 48 : 168;
+  var keys = ["hilo", "west"];
+  for(var k = 0; k < keys.length; k++){
+    var vals = c[keys[k]];
+    if(!vals){ c[keys[k] + "Total"] = null; continue; }
+    var b = qpfBlocks(vals, hours), s = 0;
+    for(var i = 0; i < b.length; i++) s += b[i].inches;
+    c[keys[k] + "Total"] = s;
+  }
+}
+
+/* ---------- events ---------- */
+function showTab(name){
+  state.tab = name;
+  document.getElementById("p-streams").hidden = name !== "streams";
+  document.getElementById("p-rain").hidden = name !== "rain";
+  document.getElementById("tab-streams").setAttribute("aria-selected", name === "streams" ? "true" : "false");
+  document.getElementById("tab-rain").setAttribute("aria-selected", name === "rain" ? "true" : "false");
+  if(name === "streams") renderStreams(); else renderRain();
+}
+document.getElementById("tab-streams").addEventListener("click", function(){ showTab("streams"); });
+document.getElementById("tab-rain").addEventListener("click", function(){ showTab("rain"); });
+
+document.addEventListener("click", function(ev){
+  var t = ev.target, hit;
+  hit = closest(t, "[data-toggle]");
+  if(hit){
+    var sid = hit.getAttribute("data-toggle");
+    state.open = state.open === sid ? null : sid;
+    renderStreams();
+    return;
+  }
+  hit = closest(t, "[data-range]");
+  if(hit){
+    var s2 = hit.getAttribute("data-sid"), r = hit.getAttribute("data-range");
+    state.range[s2] = r;
+    if(r === "7d") loadWide(s2, "d7", 8);
+    else if(r === "21d") loadWide(s2, "d21", 22);
+    renderStreams();
+    return;
+  }
+  hit = closest(t, "[data-rrange]");
+  if(hit){
+    state.rainRange = hit.getAttribute("data-rrange");
+    recalcTotals();
+    renderRain();
+  }
+});
+document.addEventListener("keydown", function(ev){
+  if(ev.key !== "Enter" && ev.key !== " ") return;
+  var hit = closest(ev.target, "[data-toggle]");
+  if(!hit) return;
+  ev.preventDefault();
+  var sid = hit.getAttribute("data-toggle");
+  state.open = state.open === sid ? null : sid;
+  renderStreams();
+});
+function closest(el, sel){
+  while(el && el.nodeType === 1){
+    if(el.matches ? el.matches(sel) : false) return el;
+    el = el.parentNode;
+  }
+  return null;
+}
+
+/* Observe the wrapper div, not the svg: WebKit does not fire ResizeObserver on SVG. */
+var redrawTimer = null;
+function scheduleRedraw(){
+  clearTimeout(redrawTimer);
+  redrawTimer = setTimeout(function(){
+    if(state.tab === "streams"){ for(var i = 0; i < STREAMS.length; i++) paintChart(STREAMS[i].id); }
+    else paintBars();
+  }, 120);
+}
+window.addEventListener("resize", scheduleRedraw);
+window.addEventListener("orientationchange", scheduleRedraw);
+
+/* ---------- go ---------- */
+for(var i = 0; i < STREAMS.length; i++) loadStream(STREAMS[i]);
+for(i = 0; i < RAINGAUGES.length; i++) loadRainObs(RAINGAUGES[i]);
+loadForecast(GRID_HILO, "hilo");
+loadForecast(GRID_WEST, "west");
+renderStreams();
+
+setInterval(function(){
+  for(var k = 0; k < STREAMS.length; k++) loadStream(STREAMS[k]);
+  for(k = 0; k < RAINGAUGES.length; k++) loadRainObs(RAINGAUGES[k]);
+}, 600000);
+setInterval(function(){
+  loadForecast(GRID_HILO, "hilo");
+  loadForecast(GRID_WEST, "west");
+}, 3600000);
+})();
+</script>
+</body>
+</html>
