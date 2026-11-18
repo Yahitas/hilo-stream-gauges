@@ -132,8 +132,10 @@ footer p{margin:0 0 6px}
 <footer>
   <p><b>Provisional data, subject to revision.</b></p>
   <p>This page refreshes itself. Gauges and measured rain every 10 minutes, forecasts every
-  hour. There is nothing to reload. The age shown under each reading is how old that number
-  actually is, so a stale value announces itself.</p>
+  hour. There is nothing to reload. If your phone froze the tab while it sat in the
+  background, the page refetches when you come back to it, and only when the numbers are
+  actually old. The age shown under each reading is how old that number is, so a stale
+  value announces itself.</p>
   <p>Discharge and rainfall: U.S. Geological Survey, National Water Information System.
   Rain forecast: NOAA National Weather Service, Honolulu. All times Hawaii Standard Time (HST).</p>
 </footer>
@@ -196,6 +198,16 @@ function fmtAge(m){
   if(h < 24) return (h < 10 ? h.toFixed(1) : Math.round(h)) + " h ago";
   return Math.round(h/24) + " d ago";
 }
+
+/* ---------- one request at a time per key ----------
+   No fetch in this page was guarded. With only the 10-minute timer that was survivable,
+   but a wake-up refresh can land on top of a timer tick, and then an older response may
+   overwrite a newer one in the cache: the card would show a number that went backwards in
+   time with no error anywhere. Repeated wakes also burn the USGS quota, 1,000 requests per
+   hour per IP. One slot per key means two responses for the same key can never be in
+   flight, so they cannot arrive out of order. A blocked call is dropped, not queued,
+   because the next timer tick is the retry. */
+var inflight = {};
 
 /* ---------- fetch with a Safari-15-safe timeout ---------- */
 function getJSON(url, ms){
@@ -671,6 +683,10 @@ function updateSub(){
 function loadStream(cfg){
   var since = Date.now() - 26*3600000;
   cache[cfg.id] = cache[cfg.id] || {};
+  var slot = "st:" + cfg.id;
+  if(inflight[slot]) return;
+  inflight[slot] = 2;
+  function settled(){ if(--inflight[slot] < 1) inflight[slot] = 0; }
   getJSON(contURL(cfg.id, "00060", since, 400)).then(function(j){
     var p = points(j.features || []);
     if(p.length){ cache[cfg.id].q = p; cache[cfg.id].err = null; }
@@ -679,6 +695,7 @@ function loadStream(cfg){
     if(!cache[cfg.id].q) cache[cfg.id].err = e.message || "fetch failed";
     else cache[cfg.id].err = e.message || "fetch failed";
   }).then(function(){
+    settled();
     if(state.tab === "streams"){ renderStreams(); }
   });
 
@@ -686,6 +703,7 @@ function loadStream(cfg){
     var p = points(j.features || []);
     if(p.length) cache[cfg.id].gh = p;
   }, function(){}).then(function(){
+    settled();
     if(state.tab === "streams" && state.open === cfg.id) renderStreams();
   });
 }
@@ -714,7 +732,9 @@ function loadWide(sid, key, days){
 function loadRainObs(g){
   cache._rain = cache._rain || {};
   cache._rain.obs = cache._rain.obs || {};
-  var since = Date.now() - 7*3600000;
+  var since = Date.now() - 7*3600000, slot = "obs:" + g.id;
+  if(inflight[slot]) return;
+  inflight[slot] = 1;
   getJSON(contURL(g.id, "00045", since, 200)).then(function(j){
     var p = points(j.features || []);
     if(!p.length){ cache._rain.obs[g.id] = {err:"no points"}; return; }
@@ -735,11 +755,14 @@ function loadRainObs(g){
     };
   }, function(e){
     cache._rain.obs[g.id] = {err: e.message || "fetch failed"};
-  }).then(function(){ if(state.tab === "rain") renderRain(); });
+  }).then(function(){ inflight[slot] = 0; if(state.tab === "rain") renderRain(); });
 }
 
 function loadForecast(grid, key){
   cache._rain = cache._rain || {};
+  var slot = "fc:" + key;
+  if(inflight[slot]) return;
+  inflight[slot] = 1;
   getJSON(NWS + "/" + grid, 20000).then(function(j){
     var q = ((j.properties || {}).quantitativePrecipitation || {}).values;
     /* A throw here lands in the NEXT then, not in the sibling rejection handler just
@@ -755,7 +778,11 @@ function loadForecast(grid, key){
     cache._rain[key + "Err"] = null;
   }, function(e){
     cache._rain[key + "Err"] = e.message || "fetch failed";
-  }).then(function(){ recalcTotals(); if(state.tab === "rain") renderRain(); });
+  }).then(function(){
+    inflight[slot] = 0;
+    recalcTotals();
+    if(state.tab === "rain") renderRain();
+  });
 }
 
 function recalcTotals(){
@@ -838,23 +865,47 @@ function scheduleRedraw(){
 window.addEventListener("resize", scheduleRedraw);
 window.addEventListener("orientationchange", scheduleRedraw);
 
-/* ---------- go ---------- */
-for(var i = 0; i < STREAMS.length; i++) loadStream(STREAMS[i]);
-for(i = 0; i < RAINGAUGES.length; i++) loadRainObs(RAINGAUGES[i]);
-loadForecast(GRID_HILO, "hilo");
-loadForecast(GRID_WEST, "west");
-for(var mi = 0; mi < GRID_MAUKA.length; mi++) loadForecast(GRID_MAUKA[mi].grid, GRID_MAUKA[mi].k);
-renderStreams();
+/* ---------- go ----------
+   One function per refresh cycle, so the boot, the timers and the wake handler below
+   cannot drift apart as sites get added. */
+var lastStreams = 0, lastForecast = 0;
 
-setInterval(function(){
+function refreshStreams(){
+  lastStreams = Date.now();
   for(var k = 0; k < STREAMS.length; k++) loadStream(STREAMS[k]);
   for(k = 0; k < RAINGAUGES.length; k++) loadRainObs(RAINGAUGES[k]);
-}, 600000);
-setInterval(function(){
+}
+
+function refreshForecast(){
+  lastForecast = Date.now();
   loadForecast(GRID_HILO, "hilo");
   loadForecast(GRID_WEST, "west");
-  for(var mj = 0; mj < GRID_MAUKA.length; mj++) loadForecast(GRID_MAUKA[mj].grid, GRID_MAUKA[mj].k);
-}, 3600000);
+  for(var m = 0; m < GRID_MAUKA.length; m++) loadForecast(GRID_MAUKA[m].grid, GRID_MAUKA[m].k);
+}
+
+refreshStreams();
+refreshForecast();
+renderStreams();
+
+setInterval(refreshStreams, 600000);
+setInterval(refreshForecast, 3600000);
+
+/* iOS freezes a backgrounded tab, so both timers above stop firing. Come back an hour
+   later and the page looks alive while every number on it is an hour old. On wake,
+   re-render first so the age line tells the truth immediately, then refetch only if the
+   data is old enough to be worth the request. Thresholds sit at half of each timer
+   interval, so flicking between apps costs nothing. pageshow covers the back-forward
+   cache, where visibilitychange is unreliable on iOS; both are idempotent, because the
+   staleness check and the in-flight guard each drop a redundant call. */
+function onWake(){
+  if(document.hidden) return;
+  if(state.tab === "streams") renderStreams(); else renderRain();
+  var now = Date.now();
+  if(now - lastStreams > 300000) refreshStreams();
+  if(now - lastForecast > 1800000) refreshForecast();
+}
+document.addEventListener("visibilitychange", onWake);
+window.addEventListener("pageshow", onWake);
 })();
 </script>
 </body>
