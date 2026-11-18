@@ -48,11 +48,9 @@ h1{font-size:19px; font-weight:650; margin:20px 0 2px; letter-spacing:-.01em}
 .nm{font-size:14px; font-weight:600; margin:0; line-height:1.25}
 .nm span{display:block; font-weight:400; font-size:12px; color:var(--mute); margin-top:1px}
 .val{text-align:right; white-space:nowrap}
-.q{font-size:29px; font-weight:600; letter-spacing:-.02em; line-height:1; color:var(--ink)}
+.q{font-variant-numeric:tabular-nums; font-size:29px; font-weight:600; letter-spacing:-.02em; line-height:1; color:var(--ink)}
 .q-unit{font-size:12px; font-weight:400; color:var(--mute); margin-left:3px}
 .tr{font-size:12px; margin-top:4px; color:var(--mute)}
-.tr.v-rise{color:var(--rise)}
-.tr.v-fall{color:var(--fall)}
 .chev{font-size:11px; color:var(--faint); margin-left:6px}
 
 .wrap{margin-top:10px; width:100%}
@@ -87,8 +85,9 @@ h1{font-size:19px; font-weight:650; margin:20px 0 2px; letter-spacing:-.01em}
 
 .rrow{display:flex; justify-content:space-between; align-items:baseline; padding:9px 0; border-bottom:1px solid var(--rule); gap:12px}
 .rrow:last-child{border-bottom:0}
-.rtot{white-space:nowrap; font-size:13px; text-align:right}
+.rtot{font-variant-numeric:tabular-nums; white-space:nowrap; font-size:13px; text-align:right}
 .rtot b{font-size:17px; font-weight:600}
+.dlabel{font-size:13px; font-weight:450; margin:0}
 .secthd{font-size:12px; font-weight:650; text-transform:uppercase; letter-spacing:.055em; color:var(--faint); margin:22px 0 6px}
 .note{font-size:12px; color:var(--mute); margin:7px 0 0}
 
@@ -98,6 +97,15 @@ h1{font-size:19px; font-weight:650; margin:20px 0 2px; letter-spacing:-.01em}
 footer{margin-top:28px; padding-top:14px; border-top:1px solid var(--line); font-size:11.5px; line-height:1.5; color:var(--faint)}
 footer p{margin:0 0 6px}
 .bar-x{font-size:9.5px; fill:var(--faint)}
+.radarhead{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 9px}
+.radarhead b{font-size:14px; font-weight:600}
+.radarbox{
+  border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--rule);
+  min-height:130px; display:flex; align-items:center; justify-content:center;
+}
+.radarbox img{display:block; width:100%; height:auto}
+.radarbox p{margin:0; padding:20px 16px; text-align:center}
+.radarnote{font-size:12.5px; line-height:1.5; color:var(--mute); margin:12px 2px 0}
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#11161b; --panel:#161c23; --ink:#e8edf2; --mute:#97a6b4; --faint:#6f8090;
@@ -117,6 +125,7 @@ footer p{margin:0 0 6px}
 <div class="tabs" role="tablist">
   <button class="tab" id="tab-streams" role="tab" aria-selected="true" aria-controls="p-streams">Streams</button>
   <button class="tab" id="tab-rain" role="tab" aria-selected="false" aria-controls="p-rain">Rain</button>
+  <button class="tab" id="tab-radar" role="tab" aria-selected="false" aria-controls="p-radar">Radar</button>
 </div>
 
 <noscript>
@@ -129,6 +138,23 @@ footer p{margin:0 0 6px}
 
 <div id="p-streams" role="tabpanel" aria-labelledby="tab-streams"></div>
 <div id="p-rain" role="tabpanel" aria-labelledby="tab-rain" hidden></div>
+<div id="p-radar" role="tabpanel" aria-labelledby="tab-radar" hidden>
+  <div class="card">
+    <div class="radarhead">
+      <b>Where the rain is right now</b>
+      <span class="seg"><button type="button" id="radar-reload">Reload</button></span>
+    </div>
+    <div class="radarbox" id="radar-box"><p class="skel">Loading radar\u2026</p></div>
+    <p class="axcap">NOAA National Weather Service radar, south shore site (PHWA). Observed only,
+    about the last hour. The color scale and the time stamp are drawn into the image by NWS, and
+    that time stamp is HST.</p>
+  </div>
+  <p class="radarnote">This is the only picture on the page, and it loads only when this tab is
+  open. If it fails, nothing else here is affected: the gauges and the rain forecast do not go
+  through radar. Radar is also the one thing on this page that is not a measurement at a site. It
+  is what the beam sees in the air, and the mountains block part of that beam, so a quiet patch
+  over a valley is not proof of a dry valley.</p>
+</div>
 
 <footer>
   <p><b>Provisional data, subject to revision.</b></p>
@@ -138,7 +164,8 @@ footer p{margin:0 0 6px}
   actually old. The age shown under each reading is how old that number is, so a stale
   value announces itself.</p>
   <p>Discharge and rainfall: U.S. Geological Survey, National Water Information System.
-  Rain forecast: NOAA National Weather Service, Honolulu. All times Hawaii Standard Time (HST).</p>
+  Rain forecast and radar: NOAA National Weather Service, Honolulu. All times Hawaii Standard
+  Time (HST).</p>
 </footer>
 
 <script>
@@ -186,6 +213,10 @@ function fmtClock(ms){
 }
 function fmtDayClock(ms){ var p = hstParts(ms); return WD[p.wd] + " " + fmtClock(ms); }
 function fmtMD(ms){ var p = hstParts(ms); return p.mo + "/" + p.d; }
+/* Short enough for the value column on a phone, absolute enough to survive a screenshot
+   pasted into an email a week later, where "12 min ago" means nothing. */
+function fmtStamp(ms){ return fmtMD(ms) + " " + fmtClock(ms) + " HST"; }
+function fmtDayDate(ms){ var p = hstParts(ms); return WD[p.wd] + " " + p.mo + "/" + p.d; }
 function fmtFull(ms){
   var p = hstParts(ms), h = p.h % 12; if(h === 0) h = 12;
   return WD[p.wd] + " " + p.mo + "/" + p.d + " " + h + ":" + (p.mi<10?"0":"") + p.mi +
@@ -204,8 +235,9 @@ function fmtAge(m){
    No fetch in this page was guarded. With only the 10-minute timer that was survivable,
    but a wake-up refresh can land on top of a timer tick, and then an older response may
    overwrite a newer one in the cache: the card would show a number that went backwards in
-   time with no error anywhere. Repeated wakes also burn the USGS quota, 1,000 requests per
-   hour per IP. One slot per key means two responses for the same key can never be in
+   time with no error anywhere. Repeated wakes also spend requests for nothing, and the
+   anonymous USGS allowance is not published anywhere, so there is no number to budget
+   against. One slot per key means two responses for the same key can never be in
    flight, so they cannot arrive out of order. A blocked call is dropped, not queued,
    because the next timer tick is the retry. */
 var inflight = {};
@@ -214,13 +246,27 @@ var inflight = {};
 function getJSON(url, ms){
   var ac = (typeof AbortController === "function") ? new AbortController() : null;
   var timer = setTimeout(function(){ if(ac) ac.abort(); }, ms || 15000);
+  function done(){ if(timer !== null){ clearTimeout(timer); timer = null; } }
   var opts = ac ? {signal: ac.signal} : {};
   return fetch(url, opts).then(function(r){
-    clearTimeout(timer);
-    if(r.status === 429) throw new Error("USGS is rate limiting, try again in a few minutes");
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    return r.json();
-  }, function(e){ clearTimeout(timer); throw e; });
+    if(r.status === 429){ done(); throw new Error("USGS is rate limiting, try again in a few minutes"); }
+    if(!r.ok){ done(); throw new Error("HTTP " + r.status); }
+    /* The timer has to survive the body read. This page used to clear it here, the moment
+       the headers arrived, which left a stalled body with nothing to abort it: the promise
+       never settled, so the in-flight slot never cleared, so that gauge stopped refetching
+       until a manual reload while its card went on aging. */
+    return r.json().then(function(j){ done(); return j; }, function(e){
+      done();
+      if(e && e.name === "AbortError") throw new Error("timed out");
+      /* A 200 whose body will not parse is a captive portal nine times out of ten: hotel
+         or airport wifi answering with its own sign-in page. */
+      throw new Error("got a web page instead of data, check wifi sign-in");
+    });
+  }, function(e){
+    done();
+    if(e && e.name === "AbortError") throw new Error("timed out");
+    throw e;
+  });
 }
 function iso(ms){ return new Date(ms).toISOString().replace(/\.\d+Z$/, "Z"); }
 function ymd(ms){
@@ -260,6 +306,16 @@ function dailyURL(id, days){
   return USGS + "/daily/items?monitoring_location_id=USGS-" + id +
     "&parameter_code=00060&statistic_id=00003&datetime=" + encodeURIComponent(since + "/..") +
     "&sortby=-time&limit=60&f=json";
+}
+
+/* Daily rain totals. statistic_id 00006 is the sum for the calendar day; 00003, used for
+   discharge above, is the mean. Measured 2026-11-18: this returns 4,174 bytes for a week
+   of totals where the same span as 15-minute values is 353,067 bytes. */
+function rainDailyURL(id, days){
+  var since = ymd(Date.now() - days*86400000);
+  return USGS + "/daily/items?monitoring_location_id=USGS-" + id +
+    "&parameter_code=00045&statistic_id=00006&datetime=" + encodeURIComponent(since + "/..") +
+    "&sortby=-time&limit=30&f=json";
 }
 
 /* ---------- symlog, which is what USGS uses for discharge ---------- */
@@ -467,18 +523,20 @@ function barChart(blocks, W, H){
   return s + "</svg>";
 }
 
-/* ---------- trend ---------- */
+/* ---------- change across the window ----------
+   This used to apply a 5 percent cutoff, label the result rising / falling / steady, and
+   color it green or amber. That is a threshold and a reading of the data, and both belong
+   to Kyle, not to the page. What is left is arithmetic: the signed difference between the
+   first and last point, and how long that took. A negative also used to render as
+   "falling -12%", with the word and the sign saying the same thing twice. */
 function trendOf(pts){
-  if(pts.length < 2) return {cls:"", txt:"one reading only"};
+  if(pts.length < 2) return {txt:"one reading only"};
   var a = pts[0].v, b = pts[pts.length-1].v;
   var hrs = (pts[pts.length-1].t - pts[0].t)/3600000;
   var span = hrs >= 1 ? hrs.toFixed(hrs < 2 ? 1 : 0) + " h" : Math.round(hrs*60) + " min";
-  if(a === 0 && b === 0) return {cls:"", txt:"flat at zero, " + span};
-  if(a === 0) return {cls:"v-rise", txt:"↑ up from zero over " + span};
-  var pc = (b - a)/a*100;
-  if(pc >= 5) return {cls:"v-rise", txt:"↑ rising +" + pc.toFixed(0) + "% over " + span};
-  if(pc <= -5) return {cls:"v-fall", txt:"↓ falling " + pc.toFixed(0) + "% over " + span};
-  return {cls:"", txt:"→ steady " + (pc > 0 ? "+" : "") + pc.toFixed(0) + "% over " + span};
+  var d = b - a;
+  if(d === 0) return {txt:"no change over " + span};
+  return {txt:(d > 0 ? "+" : "−") + nfmt(Math.abs(d)) + " cfs over " + span};
 }
 
 /* ---------- NWS QPF: one bar per forecast block, no invented hourly detail ---------- */
@@ -562,11 +620,12 @@ function streamCard(cfg){
   var h = '<div class="card" data-sid="' + cfg.id + '">';
   h += '<div class="card-hd" role="button" tabindex="0" aria-expanded="' + (open ? "true" : "false") +
        '" data-toggle="' + cfg.id + '"><div class="nm">' + esc(cfg.nm) +
-       '<span>' + esc(cfg.at) + ' · ' + esc(cfg.id) + '</span></div><div class="val">';
+       '<span>' + esc(cfg.at) + ' · ' + esc(cfg.id) + ' · provisional</span></div><div class="val">';
   if(c.q && c.q.length){
     var last = c.q[c.q.length-1], tr = trendOf(c.q), am = ageMin(last.t);
     h += '<div class="q">' + esc(nfmt(last.v)) + '<span class="q-unit">cfs</span></div>';
-    h += '<div class="tr ' + tr.cls + '">' + esc(tr.txt) + '</div>';
+    h += '<div class="tr">' + esc(tr.txt) + '</div>';
+    h += '<div class="tr">' + esc(fmtStamp(last.t)) + '</div>';
     h += '<div class="tr">' + esc(fmtAge(am)) + (am > STALE_MIN ? ' <span class="stale">· stale</span>' : "") +
          '<span class="chev">' + (open ? "▴" : "▾") + '</span></div>';
   } else if(c.err){
@@ -636,6 +695,41 @@ function paintChart(sid){
   el.innerHTML = svg ? svg + '<p class="axcap">discharge, cfs \u00b7 times HST</p>' : "";
 }
 
+function antecedentBlock(){
+  var H = (cache._rain || {}).hist || {}, i, j;
+  var h = '<div class="secthd">Antecedent rain, how wet it already is</div>';
+  for(i = 0; i < RAINGAUGES.length; i++){
+    var g = RAINGAUGES[i], d = H[g.id] || {};
+    h += '<div class="card"><div class="rrow"><div class="nm">' + esc(g.nm) +
+         '<span>' + esc(g.at) + ' · ' + esc(g.id) + ' · provisional</span></div>' +
+         '<div class="rtot">';
+    if(d.d2 != null){
+      h += '<b>' + d.d2.toFixed(2) + '</b> in / 48 h';
+      if(d.d2short) h += '<div class="tr"><span class="stale">' + esc(d.d2short) + '</span></div>';
+    }
+    else if(d.d2err) h += '<span class="err">' + esc(d.d2err) + '</span>';
+    else h += '<span class="skel">…</span>';
+    h += '</div></div>';
+    if(d.days && d.days.length){
+      for(j = d.days.length - 1; j >= 0; j--){
+        h += '<div class="rrow"><p class="dlabel">' + esc(fmtDayDate(d.days[j].t)) +
+             '</p><div class="rtot"><b>' + d.days[j].v.toFixed(2) + '</b> in</div></div>';
+      }
+      h += '</div><p class="note">Each row is the USGS total for that calendar day in HST, ' +
+           'newest first. The newest one is <b>' + esc(fmtDayDate(d.days[d.days.length-1].t)) +
+           '</b>, because the daily series runs about a day and a half behind. The 48 hour ' +
+           'figure above is measured 15-minute values and overlaps the last day or two ' +
+           'listed, so these are two different series and they are not meant to add up. ' +
+           'A day the gauge spent partly offline sums low, and USGS does not mark that here.</p>';
+    } else if(d.daysErr){
+      h += '</div><p class="err">Daily totals unavailable (' + esc(d.daysErr) + ').</p>';
+    } else {
+      h += '</div><p class="skel">Loading daily totals…</p>';
+    }
+  }
+  return h;
+}
+
 function renderRain(){
   var el = document.getElementById("p-rain"), c = cache._rain || {}, i;
   var h = '<div class="secthd">Measured rain, USGS gauges</div><div class="card">';
@@ -645,15 +739,19 @@ function renderRain(){
     if(d && d.ok){
       h += '<b>' + (d.h1 === null ? "–" : d.h1.toFixed(2)) + '</b> in / 1 h<br>' +
            '<b>' + (d.h6 === null ? "–" : d.h6.toFixed(2)) + '</b> in / 6 h';
+      h += '<div class="tr">' + esc(fmtStamp(d.newest)) + '</div>';
       h += '<div class="tr">' + esc(fmtAge(ageMin(d.newest))) +
            (ageMin(d.newest) > STALE_MIN ? ' <span class="stale">· stale</span>' : "") + '</div>';
       if(d.short) h += '<div class="tr"><span class="stale">' + esc(d.short) + '</span></div>';
+      if(d.err) h += '<div class="tr"><span class="stale">last refresh failed</span></div>';
     } else if(d && d.err){ h += '<span class="err">no reading</span>'; }
     else { h += '<span class="skel">…</span>'; }
     h += '</div></div>';
   }
   h += '</div><p class="note">Totals add the 15-minute buckets inside the window. A dash means the gauge ' +
        'reported nothing in that window, which is not the same as zero rain.</p>';
+
+  h += antecedentBlock();
 
   h += '<div class="secthd">Forecast rain, Hilo</div><div class="card">';
   h += '<div class="seg" role="group" aria-label="Forecast length">' +
@@ -723,16 +821,37 @@ function paintBars(){
   }
 }
 
+/* "N of 3 gauges reporting" used to count any gauge holding a cached value, however old,
+   so the header could read "3 of 3" with one gauge a day stale. Count only the ones inside
+   STALE_MIN, and name the age of the oldest, because the oldest is the one that misleads. */
 function updateSub(){
-  var newest = 0, ok = 0;
+  var newest = 0, oldest = 0, fresh = 0, have = 0;
   for(var i = 0; i < STREAMS.length; i++){
     var c = cache[STREAMS[i].id];
-    if(c && c.q && c.q.length){ ok++; if(c.q[c.q.length-1].t > newest) newest = c.q[c.q.length-1].t; }
+    if(!(c && c.q && c.q.length)) continue;
+    have++;
+    var t = c.q[c.q.length-1].t;
+    if(t > newest) newest = t;
+    if(!oldest || t < oldest) oldest = t;
+    if(ageMin(t) <= STALE_MIN) fresh++;
   }
   var el = document.getElementById("sub");
-  if(!newest){ el.textContent = ok ? "–" : "Loading live USGS data…"; return; }
-  el.textContent = "Newest reading " + fmtFull(newest) + " · " + fmtAge(ageMin(newest)) +
-                   " · " + ok + " of " + STREAMS.length + " gauges reporting";
+  if(!have){ el.textContent = "Loading live USGS data…"; return; }
+  var txt = "Newest reading " + fmtFull(newest) + " · " + fmtAge(ageMin(newest)) +
+            " · " + fresh + " of " + STREAMS.length + " gauges current";
+  if(fresh < have) txt += " · oldest " + fmtAge(ageMin(oldest));
+  if(have < STREAMS.length) txt += " · " + (STREAMS.length - have) + " not reporting";
+  el.textContent = txt;
+}
+
+/* A failed rain refresh used to overwrite the last good reading with an error object, so
+   one timeout blanked the rain row while the stream cards, on the same kind of failure,
+   kept showing their last value. The asymmetry was the defect. Keep the reading, attach
+   the error, and let the row say both. */
+function keepOrSet(bag, id, msg){
+  var prev = bag[id];
+  if(prev && prev.ok) prev.err = msg;
+  else bag[id] = {err: msg};
 }
 
 /* ---------- loaders, each gauge independent so one failure cannot blank the page ---------- */
@@ -793,7 +912,7 @@ function loadRainObs(g){
   inflight[slot] = 1;
   getJSON(contURL(g.id, "00045", since, 200)).then(function(j){
     var p = points(j.features || []);
-    if(!p.length){ cache._rain.obs[g.id] = {err:"no points"}; return; }
+    if(!p.length){ keepOrSet(cache._rain.obs, g.id, "no reports in 7 h"); return; }
     var now = Date.now(), newest = p[p.length-1].t;
     function win(h){
       var cut = now - h*3600000, sum = 0, n = 0;
@@ -810,8 +929,49 @@ function loadRainObs(g){
       short: short
     };
   }, function(e){
-    cache._rain.obs[g.id] = {err: e.message || "fetch failed"};
+    keepOrSet(cache._rain.obs, g.id, e.message || "fetch failed");
   }).then(function(){ inflight[slot] = 0; if(state.tab === "rain") renderRain(); });
+}
+
+/* Antecedent rain: the half of the 5:45 AM question that discharge cannot answer, because
+   a catchment already loaded responds to the next inch differently than a dry one. Two
+   calls, because neither works alone. The daily sums are cheap but they lag about a day
+   and a half and carry a bare calendar date; the 48 h continuous window covers exactly
+   that gap. Both run hourly rather than on the 10-minute stream cadence, because neither
+   changes fast enough to be worth the requests. */
+function loadRainHist(g){
+  cache._rain = cache._rain || {};
+  cache._rain.hist = cache._rain.hist || {};
+  var H = cache._rain.hist[g.id] = cache._rain.hist[g.id] || {};
+  var slot = "hist:" + g.id;
+  if(inflight[slot]) return;
+  inflight[slot] = 2;
+  function settled(){
+    if(--inflight[slot] < 1) inflight[slot] = 0;
+    if(state.tab === "rain") renderRain();
+  }
+
+  getJSON(contURL(g.id, "00045", Date.now() - 48*3600000, 220)).then(function(j){
+    var q = points(j.features || []);
+    if(q.length){
+      var sum = 0;
+      for(var i = 0; i < q.length; i++) sum += q[i].v;
+      H.d2 = Math.round(sum*100)/100;
+      /* 48 h at 15-minute reporting is 192 buckets, and the window edge alone normally
+         costs one or two: measured 190 and 191 on a healthy gauge. Flagging at 191 would
+         cry wolf on every refresh, so flag only once more than two hours are missing. */
+      H.d2short = q.length < 184 ? q.length + " of 192 reports in 48 h" : null;
+      H.d2err = null;
+    } else if(H.d2 == null) H.d2err = "no reports in 48 h";
+  }, function(e){ if(H.d2 == null) H.d2err = e.message || "fetch failed"; }).then(settled);
+
+  /* The daily endpoint hands these back out of order. dailyPoints sorts, and anchors the
+     bare date at HST noon so the day label does not slide back one. */
+  getJSON(rainDailyURL(g.id, 8)).then(function(j){
+    var q = dailyPoints(j.features || []);
+    if(q.length){ H.days = q; H.daysErr = null; }
+    else if(!H.days) H.daysErr = "USGS has no daily totals for this gauge yet";
+  }, function(e){ if(!H.days) H.daysErr = e.message || "fetch failed"; }).then(settled);
 }
 
 function loadForecast(grid, key){
@@ -855,17 +1015,57 @@ function recalcTotals(){
   }
 }
 
+/* ---------- radar ----------
+   One image, one source, no key. The loop is about 150 KB, which is three times the whole
+   rest of this page, so it is fetched on the first visit to the tab and not before. NWS
+   sets max-age=120 on it and the frames arrive about that often, so a reopen inside two
+   minutes keeps what is already on screen instead of pulling the same bytes again. */
+var RADAR_URL = "https://radar.weather.gov/ridge/standard/PHWA_loop.gif";
+var radarAt = 0;
+
+function loadRadar(force){
+  var box = document.getElementById("radar-box");
+  var now = Date.now();
+  if(!force && radarAt && now - radarAt < 120000) return;
+  radarAt = now;
+  box.innerHTML = '<p class="skel">Loading radar\u2026</p>';
+  var im = new Image();
+  im.alt = "National Weather Service radar loop, south shore Hawaii Island";
+  im.onload = function(){
+    if(radarAt !== now) return;
+    box.innerHTML = "";
+    box.appendChild(im);
+  };
+  im.onerror = function(){
+    if(radarAt !== now) return;
+    radarAt = 0;
+    box.innerHTML = '<p class="err">The radar image did not load. That is the National Weather ' +
+      'Service, not this page, and the other tabs are unaffected. Try Reload, or open ' +
+      'radar.weather.gov directly.</p>';
+  };
+  im.src = RADAR_URL + "?t=" + now;
+}
+
 /* ---------- events ---------- */
 function showTab(name){
   state.tab = name;
   document.getElementById("p-streams").hidden = name !== "streams";
   document.getElementById("p-rain").hidden = name !== "rain";
+  document.getElementById("p-radar").hidden = name !== "radar";
   document.getElementById("tab-streams").setAttribute("aria-selected", name === "streams" ? "true" : "false");
   document.getElementById("tab-rain").setAttribute("aria-selected", name === "rain" ? "true" : "false");
-  if(name === "streams") renderStreams(); else renderRain();
+  document.getElementById("tab-radar").setAttribute("aria-selected", name === "radar" ? "true" : "false");
+  if(name === "streams") renderStreams();
+  else if(name === "rain"){
+    if(Date.now() - lastRainHist > 1800000) refreshRainHist();
+    renderRain();
+  }
+  else loadRadar(false);
 }
 document.getElementById("tab-streams").addEventListener("click", function(){ showTab("streams"); });
 document.getElementById("tab-rain").addEventListener("click", function(){ showTab("rain"); });
+document.getElementById("tab-radar").addEventListener("click", function(){ showTab("radar"); });
+document.getElementById("radar-reload").addEventListener("click", function(){ loadRadar(true); });
 
 document.addEventListener("click", function(ev){
   var t = ev.target, hit;
@@ -915,7 +1115,7 @@ function scheduleRedraw(){
   clearTimeout(redrawTimer);
   redrawTimer = setTimeout(function(){
     if(state.tab === "streams"){ for(var i = 0; i < STREAMS.length; i++) paintChart(STREAMS[i].id); }
-    else paintBars();
+    else if(state.tab === "rain") paintBars();
   }, 120);
 }
 window.addEventListener("resize", scheduleRedraw);
@@ -924,12 +1124,17 @@ window.addEventListener("orientationchange", scheduleRedraw);
 /* ---------- go ----------
    One function per refresh cycle, so the boot, the timers and the wake handler below
    cannot drift apart as sites get added. */
-var lastStreams = 0, lastForecast = 0;
+var lastStreams = 0, lastForecast = 0, lastRainHist = 0;
 
 function refreshStreams(){
   lastStreams = Date.now();
   for(var k = 0; k < STREAMS.length; k++) loadStream(STREAMS[k]);
   for(k = 0; k < RAINGAUGES.length; k++) loadRainObs(RAINGAUGES[k]);
+}
+
+function refreshRainHist(){
+  lastRainHist = Date.now();
+  for(var k = 0; k < RAINGAUGES.length; k++) loadRainHist(RAINGAUGES[k]);
 }
 
 function refreshForecast(){
@@ -945,6 +1150,11 @@ renderStreams();
 
 setInterval(refreshStreams, 600000);
 setInterval(refreshForecast, 3600000);
+/* The 48 h window is the one genuinely heavy call on this page: measured 97 KB per gauge,
+   against 4.7 KB for a gauge's week of daily totals. Streams is the tab that opens, so
+   neither antecedent call is made until the rain tab is actually looked at, and after that
+   the pair refreshes hourly. A session that never opens that tab pays nothing. */
+setInterval(function(){ if(lastRainHist) refreshRainHist(); }, 3600000);
 
 /* iOS freezes a backgrounded tab, so both timers above stop firing. Come back an hour
    later and the page looks alive while every number on it is an hour old. On wake,
@@ -955,9 +1165,12 @@ setInterval(refreshForecast, 3600000);
    staleness check and the in-flight guard each drop a redundant call. */
 function onWake(){
   if(document.hidden) return;
-  if(state.tab === "streams") renderStreams(); else renderRain();
+  if(state.tab === "streams") renderStreams();
+  else if(state.tab === "rain") renderRain();
+  else loadRadar(false);
   var now = Date.now();
   if(now - lastStreams > 300000) refreshStreams();
+  if(lastRainHist && now - lastRainHist > 1800000) refreshRainHist();
   if(now - lastForecast > 1800000) refreshForecast();
 }
 document.addEventListener("visibilitychange", onWake);
