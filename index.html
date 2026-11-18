@@ -65,6 +65,13 @@ h1{font-size:19px; font-weight:650; margin:20px 0 2px; letter-spacing:-.01em}
 .dot{fill:var(--accent)}
 .barrect{fill:var(--bar)}
 .barzero{fill:var(--line)}
+.cumline{fill:none; stroke:var(--accent); stroke-width:2; stroke-linejoin:round}
+.cumdot{fill:var(--accent)}
+.cumlab{font-size:10px; fill:var(--accent)}
+.cond{display:flex; flex-wrap:wrap; gap:7px 16px; margin:9px 0 0}
+.cond div{display:flex; flex-direction:column; min-width:60px}
+.cond span{font-size:11px; color:var(--faint)}
+.cond b{font-size:14px; font-weight:600; color:var(--ink)}
 
 .detail{margin-top:12px; padding-top:12px; border-top:1px solid var(--rule)}
 .seg{display:inline-flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; margin-bottom:4px}
@@ -123,12 +130,12 @@ footer p{margin:0 0 6px}
 <div id="p-rain" role="tabpanel" aria-labelledby="tab-rain" hidden></div>
 
 <footer>
-  <p><b>Provisional data, subject to revision.</b> These readings have not been reviewed or
-  approved by the USGS. They may be wrong because of instrument faults or physical change at the
-  gauge. Do not use them for any decision about personal or public safety.</p>
+  <p><b>Provisional data, subject to revision.</b></p>
+  <p>This page refreshes itself. Gauges and measured rain every 10 minutes, forecasts every
+  hour. There is nothing to reload. The age shown under each reading is how old that number
+  actually is, so a stale value announces itself.</p>
   <p>Discharge and rainfall: U.S. Geological Survey, National Water Information System.
   Rain forecast: NOAA National Weather Service, Honolulu. All times Hawaii Standard Time (HST).</p>
-  <p>Not a USGS product and not endorsed by the USGS. Built for ASU field work.</p>
 </footer>
 
 <script>
@@ -152,6 +159,12 @@ var RAINGAUGES = [
 
 var GRID_HILO = "HFO/270,74";
 var GRID_WEST = "HFO/242,87";
+/* Upslope cells. The Hilo cell above is coastal town, which is not where the water
+   that moves these gauges falls. These two sit over the catchments themselves. */
+var GRID_MAUKA = [
+  {k:"honhd",   grid:"HFO/265,76", nm:"Honoliʻi headwaters"},
+  {k:"wailmid", grid:"HFO/265,73", nm:"Mid Wailuku"}
+];
 
 var state = {tab:"streams", open:null, range:{}, rainRange:"48h"};
 var cache = {};
@@ -324,15 +337,22 @@ function lineChart(pts, W, H, xfmt){
 }
 
 function barChart(blocks, W, H){
-  var ml = 34, mr = 8, mt = 8, mb = 26;
+  var ml = 34, mr = 36, mt = 8, mb = 26;
   var iw = W - ml - mr, ih = H - mt - mb;
   if(iw < 60 || !blocks.length) return "";
-  var i, hi = 0;
-  for(i = 0; i < blocks.length; i++) if(blocks[i].inches > hi) hi = blocks[i].inches;
+  var i, hi = 0, run = 0, cum = [];
+  for(i = 0; i < blocks.length; i++){
+    if(blocks[i].inches > hi) hi = blocks[i].inches;
+    run += blocks[i].inches > 0 ? blocks[i].inches : 0;
+    cum.push(run);
+  }
   var top = hi <= 0 ? 0.1 : hi * 1.2;
+  /* The running total gets its OWN scale on the right. It always exceeds the largest
+     single block, so sharing the left axis would squash every bar toward the baseline. */
+  var ctop = run <= 0 ? 0.1 : run * 1.08;
   var bw = iw / blocks.length;
   var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H +
-          '" role="img" aria-label="Forecast rainfall per six-hour block, inches">';
+          '" role="img" aria-label="Forecast rainfall per six-hour block in inches, left axis, with the running total on the right axis">';
   var steps = [0, top/2, top];
   for(i = 0; i < steps.length; i++){
     var y = (mt + ih - steps[i]/top*ih).toFixed(1);
@@ -341,13 +361,19 @@ function barChart(blocks, W, H){
     s += '<text class="axlab" x="' + (ml-5) + '" y="' + y + '" text-anchor="end" dominant-baseline="middle">' +
          steps[i].toFixed(2) + '</text>';
   }
+  var csteps = [ctop/2, ctop];
+  for(i = 0; i < csteps.length; i++){
+    var cy = (mt + ih - csteps[i]/ctop*ih).toFixed(1);
+    s += '<text class="cumlab" x="' + (ml+iw+5) + '" y="' + cy + '" text-anchor="start" dominant-baseline="middle">' +
+         csteps[i].toFixed(2) + '</text>';
+  }
   for(i = 0; i < blocks.length; i++){
     var b = blocks[i];
     var h = b.inches <= 0 ? 1.5 : Math.max(1.5, b.inches/top*ih);
     var x = ml + i*bw + bw*0.16, w = bw*0.68;
     s += '<rect class="' + (b.inches > 0 ? "barrect" : "barzero") + '" x="' + x.toFixed(1) +
          '" y="' + (mt + ih - h).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) +
-         '" rx="1.5"><title>' + esc(fmtDayClock(b.start) + " HST → " + b.inches.toFixed(2) + " in") + '</title></rect>';
+         '" rx="1.5"><title>' + esc(fmtDayClock(b.start) + " HST \u2192 " + b.inches.toFixed(2) + " in this block") + '</title></rect>';
     var every = blocks.length > 10 ? 4 : 2;
     if(i % every === 0){
       s += '<text class="bar-x" x="' + (x + w/2).toFixed(1) + '" y="' + (H - 14) + '" text-anchor="middle">' +
@@ -356,7 +382,22 @@ function barChart(blocks, W, H){
            esc(fmtMD(b.start)) + '</text>';
     }
   }
+  /* Cumulative line last, so it sits on top of the bars. */
+  var d = "";
+  for(i = 0; i < blocks.length; i++){
+    var cx = ml + i*bw + bw/2, cyy = mt + ih - cum[i]/ctop*ih;
+    d += (i ? " L" : "M") + cx.toFixed(1) + " " + cyy.toFixed(1);
+  }
+  s += '<path class="cumline" d="' + d + '"/>';
+  if(blocks.length <= 14){
+    for(i = 0; i < blocks.length; i++){
+      var dx = ml + i*bw + bw/2, dy = mt + ih - cum[i]/ctop*ih;
+      s += '<circle class="cumdot" cx="' + dx.toFixed(1) + '" cy="' + dy.toFixed(1) + '" r="2.2"><title>' +
+           esc("running total " + cum[i].toFixed(2) + " in through " + fmtDayClock(blocks[i].start) + " HST") + '</title></circle>';
+    }
+  }
   s += '<text class="axlab" x="2" y="' + (mt + 4) + '">in</text>';
+  s += '<text class="cumlab" x="' + (W - 2) + '" y="' + (mt + 4) + '" text-anchor="end">total</text>';
   return s + "</svg>";
 }
 
@@ -392,6 +433,55 @@ function qpfBlocks(vals, hoursAhead){
     out.push({start:st, hours:dh, inches: mm == null ? 0 : mm/25.4, partial: st < now});
   }
   return out;
+}
+
+/* ---------- NWS point conditions: pick the published block that covers right now.
+   Every field except QPF mixes block lengths entry to entry (PT1H through P3DT18H),
+   so the block is found by start plus duration, never by index. ---------- */
+function valNow(series){
+  if(!series || !series.values || !series.values.length) return null;
+  var now = Date.now(), v = series.values, i, p, st, dh;
+  for(i = 0; i < v.length; i++){
+    p = String(v[i].validTime).split("/");
+    st = Date.parse(p[0]); dh = durHours(p[1]);
+    if(!isFinite(st) || !dh) continue;
+    if(now >= st && now < st + dh*3600000) return v[i].value;
+  }
+  for(i = 0; i < v.length; i++){
+    p = String(v[i].validTime).split("/");
+    st = Date.parse(p[0]);
+    if(isFinite(st) && st >= now) return v[i].value;
+  }
+  return null;
+}
+
+function compass(deg){
+  if(deg == null) return "";
+  var pts = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return pts[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
+}
+
+function condStrip(p){
+  if(!p) return "";
+  var t = valNow(p.temperature), pop = valNow(p.probabilityOfPrecipitation),
+      sky = valNow(p.skyCover), ws = valNow(p.windSpeed), wd = valNow(p.windDirection),
+      wg = valNow(p.windGust), rh = valNow(p.relativeHumidity);
+  var out = [], i;
+  if(pop != null) out.push(["Chance of rain", Math.round(pop) + "%"]);
+  if(t != null) out.push(["Air temp", Math.round(t*9/5 + 32) + "\u00b0F"]);
+  if(ws != null){
+    var mph = Math.round(ws/1.609344);
+    var txt = (wd != null ? compass(wd) + " " : "") + mph + " mph";
+    if(wg != null && wg/1.609344 >= mph + 5) txt += ", gusts " + Math.round(wg/1.609344);
+    out.push(["Wind", txt]);
+  }
+  if(sky != null) out.push(["Cloud cover", Math.round(sky) + "%"]);
+  if(rh != null) out.push(["Humidity", Math.round(rh) + "%"]);
+  if(!out.length) return "";
+  var h = '<div class="cond">';
+  for(i = 0; i < out.length; i++)
+    h += '<div><span>' + esc(out[i][0]) + '</span><b>' + esc(out[i][1]) + '</b></div>';
+  return h + '</div>';
 }
 
 /* ---------- render ---------- */
@@ -510,16 +600,38 @@ function renderRain(){
   }
   if(c.hiloErr) h += '<p class="err">Forecast unavailable (' + esc(c.hiloErr) + ').</p>';
   else if(!c.hilo) h += '<p class="skel">Loading forecast…</p>';
-  h += '<p class="note">Each bar is one 6-hour National Weather Service block, which is the finest ' +
-       'resolution they forecast rain amounts at. Nothing is spread across hours.</p></div>';
+  h += condStrip(c.hiloP);
+  h += '<p class="note">Bars are the rain forecast for each 6-hour National Weather Service block, ' +
+       'read off the left axis. That is the finest resolution they publish amounts at, so nothing ' +
+       'is spread across hours. The line is the running total across the window, on the right axis, ' +
+       'which has its own scale. Conditions above are for the block happening now.</p></div>';
+
+  h += '<div class="secthd">Upslope cells</div><div class="card">';
+  for(i = 0; i < GRID_MAUKA.length; i++){
+    var m = GRID_MAUKA[i], mt2 = c[m.k + "Total"];
+    h += '<div class="rrow"><div class="nm">' + esc(m.nm) +
+         '<span>NWS grid ' + esc(m.grid.replace("HFO/", "")) + '</span></div><div class="rtot">';
+    if(c[m.k + "Err"]) h += '<span class="err">no forecast</span>';
+    else if(mt2 == null) h += '<span class="skel">\u2026</span>';
+    else h += '<b>' + mt2.toFixed(2) + '</b> in / ' + (state.rainRange === "48h" ? "48 h" : "7 d");
+    h += '</div></div>';
+  }
+  h += '</div><p class="note">The Hilo cell above is coastal town. These two sit over the ground that ' +
+       'feeds the gauges: one above Honoli' + '\u02bb' + 'i, one on the mid Wailuku slope. Totals only, ' +
+       'following the same 48 hour and 7 day choice.</p>';
 
   h += '<div class="secthd">West side, Waiʻulaʻula · secondary</div><div class="card">';
+  h += '<div class="seg" role="group" aria-label="West side forecast length">' +
+       '<button type="button" data-rrange="48h" aria-pressed="' + (state.rainRange === "48h" ? "true" : "false") + '">48 hours</button>' +
+       '<button type="button" data-rrange="7d" aria-pressed="' + (state.rainRange === "7d" ? "true" : "false") + '">7 days</button>' +
+       '</div>';
   h += '<div class="wrap" data-chart="_west" data-kind="bar"></div>';
   if(c.westTotal != null){
     h += '<p class="meta">Waikoloa Village grid, nearest NWS cell to the Waiʻulaʻula confluence. ' +
          'Next ' + (state.rainRange === "48h" ? "48 h" : "7 d") + ': <b>' + c.westTotal.toFixed(2) + ' in</b></p>';
   }
   if(c.westErr) h += '<p class="err">Forecast unavailable (' + esc(c.westErr) + ').</p>';
+  h += condStrip(c.westP);
   h += '<p class="note">Forecast only. There is no telemetered USGS gauge anywhere on Waiʻulaʻula, ' +
        'so nothing measured can be shown here.</p></div>';
 
@@ -639,6 +751,7 @@ function loadForecast(grid, key){
       return;
     }
     cache._rain[key] = q;
+    cache._rain[key + "P"] = j.properties || null;
     cache._rain[key + "Err"] = null;
   }, function(e){
     cache._rain[key + "Err"] = e.message || "fetch failed";
@@ -649,6 +762,7 @@ function recalcTotals(){
   var c = cache._rain || {};
   var hours = state.rainRange === "48h" ? 48 : 168;
   var keys = ["hilo", "west"];
+  for(var m = 0; m < GRID_MAUKA.length; m++) keys.push(GRID_MAUKA[m].k);
   for(var k = 0; k < keys.length; k++){
     var vals = c[keys[k]];
     if(!vals){ c[keys[k] + "Total"] = null; continue; }
@@ -729,6 +843,7 @@ for(var i = 0; i < STREAMS.length; i++) loadStream(STREAMS[i]);
 for(i = 0; i < RAINGAUGES.length; i++) loadRainObs(RAINGAUGES[i]);
 loadForecast(GRID_HILO, "hilo");
 loadForecast(GRID_WEST, "west");
+for(var mi = 0; mi < GRID_MAUKA.length; mi++) loadForecast(GRID_MAUKA[mi].grid, GRID_MAUKA[mi].k);
 renderStreams();
 
 setInterval(function(){
@@ -738,6 +853,7 @@ setInterval(function(){
 setInterval(function(){
   loadForecast(GRID_HILO, "hilo");
   loadForecast(GRID_WEST, "west");
+  for(var mj = 0; mj < GRID_MAUKA.length; mj++) loadForecast(GRID_MAUKA[mj].grid, GRID_MAUKA[mj].k);
 }, 3600000);
 })();
 </script>
